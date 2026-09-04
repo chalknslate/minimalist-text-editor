@@ -266,18 +266,22 @@ void ptcursor(struct FInfo *f, int target, int *x, int *y) {
 void scroll(struct FInfo *f) {
   if (f->cy - 1 < f->rowoff) {
     f->rowoff = f->cy - 1;
+    f->fl[FCHANG]=1;
   }
 
   if (f->cy - 1 >= f->rowoff + f->t_h) {
     f->rowoff = f->cy - f->t_h;
+    f->fl[FCHANG]=1;
   }
 
   if (f->cx - 1 < f->coloff) {
     f->coloff = f->cx - 1;
+    f->fl[FCHANG]=1;
   }
 
   if (f->cx - 1 >= f->coloff + f->t_w) {
     f->coloff = f->cx - f->t_w;
+    f->fl[FCHANG]=1;
   }
 }
 int read_char(struct FInfo* f) {
@@ -327,6 +331,7 @@ void handle_char(struct FInfo * f, int c) {
     }
     case ('e' & 0x1F): {
       clean_tbuf(f);
+      f->fl[FCHANG] = 1;
       break;
     }
     case ('s' & 0x1F): {
@@ -472,7 +477,7 @@ void handle_char(struct FInfo * f, int c) {
           f->cx = 1;
         }
       }
-
+      f->fl[FCHANG] = 1;
       break;
     }
     case '\t': {
@@ -480,19 +485,20 @@ void handle_char(struct FInfo * f, int c) {
 
       insertc(f, '\t');
       f->cx += width;
-
+      f->fl[FCHANG] = 1;
       break;
     }
     case '\r': {
       insertc(f, '\n');
       f->cy++;
       f->cx = 1;
+      f->fl[FCHANG] = 1;
       break;
     }
     default: {
       insertc(f,c);
       f->cx++;
-      //write(STDOUT_FILENO, &c, 1);
+      f->fl[FCHANG] = 1;
       break;
     }
   }
@@ -527,7 +533,7 @@ void write_to_wbuf_ft(struct FInfo *f) {
   for (int i = 0; i < f->tbuf.len; i++) {
     
     if (f->tbuf.t[i] == '\n') {
-      if (row >= f->rowoff && row < f->rowoff + f->t_h) {
+      if (row >= f->rowoff && row < f->rowoff + f->t_h -1) {
         apwbuf(&f->wbuf, "\r\n");
       }
       
@@ -539,7 +545,7 @@ void write_to_wbuf_ft(struct FInfo *f) {
     if (f->tbuf.t[i] == '\t') {
       int spaces = 4 - (col % 4);
 
-      if (row >= f->rowoff && row < f->rowoff + f->t_h) {
+      if (row >= f->rowoff && row < f->rowoff + f->t_h -1) {
         for (int j = 0; j < spaces; j++) {
           apwbuf(&f->wbuf, " ");
         }
@@ -549,7 +555,7 @@ void write_to_wbuf_ft(struct FInfo *f) {
       continue;
     }
     
-    if (row >= f->rowoff && row < f->rowoff + f->t_h &&col >= f->coloff && col < f->coloff + f->t_w) {
+    if (row >= f->rowoff && row < f->rowoff + f->t_h - 1 &&col >= f->coloff && col < f->coloff + f->t_w - 1) {
       char c[2] = {f->tbuf.t[i], 0};
       apwbuf(&f->wbuf, c);
     }
@@ -617,16 +623,22 @@ int main(int argc, char*argv[]) {
   fi.wbuf.size = sizeof(char)*(fi.t_w*fi.t_h*2);
   load_tbuf(&fi);
   write_to_wbuf(&fi);
+  clear_term(&fi);
+  write_to_wbuf_ft(&fi);
+  wowbuf(&fi);
   while(1) {
     if(fi.cx < 1) {
       fi.cx = 1;
     }
-    clear_term(&fi);
-    scroll(&fi);
-    write_to_wbuf_ft(&fi);
-    wowbuf(&fi);
     mvcursor(&fi, fi.cx - fi.coloff, fi.cy - fi.rowoff);
-    handle_char(&fi, read_char(&fi)); 
+    handle_char(&fi, read_char(&fi));
+    scroll(&fi);
+    if (fi.fl[FCHANG]) {
+        clear_term(&fi);
+        write_to_wbuf_ft(&fi);
+        wowbuf(&fi);
+        fi.fl[FCHANG] = 0;
+    }
     if(fi.fl[EXQUIT]==1) {
       reset_term();
       fclose(fi.fp);
@@ -635,7 +647,6 @@ int main(int argc, char*argv[]) {
       exit(0);
     }
     get_win_size(&fi);
-    fi.fl[FCHANG] = 0;
   }
   free(fi.tbuf.t);
   return 0;
